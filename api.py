@@ -1,28 +1,37 @@
 from flask import Flask, request, jsonify
 import psycopg2
+import bcrypt
 
 app = Flask(__name__)
 
 # Conexión a la base de datos
 def connect_db():
     return psycopg2.connect(
-        host="tu_host",
-        database="tu_base_de_datos",
-        user="tu_usuario",
-        password="tu_contraseña"
+        host="localhost",
+        database="web",
+        user="postgres",
+        password="root@."
     )
 
-# Ruta para el registro de usuarios
+# Ruta para el registro de usuariosimport bcrypt  # Asegúrate de importar bcrypt
+
 @app.route('/register', methods=['POST'])
 def register():
     try:
         data = request.json
         username = data['username']
+        estado = data['state']
+        rol = data['rol']
         password = data['password']
+        
+        # Generar un hash de contraseña utilizando bcrypt
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO Usuarios (Nombre) VALUES (%s) RETURNING ID", (username,))
+        print(hashed_password.decode('utf-8'))
+        cursor.execute("INSERT INTO Usuarios (nombre, estado, id_rol, password) \
+                       VALUES (%s, %s, %s, %s) RETURNING ID", (username, estado, rol, hashed_password))
         user_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
@@ -32,7 +41,9 @@ def register():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 # Ruta para el inicio de sesión
+
 @app.route('/login', methods=['POST'])
 def login():
     try:
@@ -42,16 +53,22 @@ def login():
         
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT ID FROM Usuarios WHERE Nombre = %s", (username,))
-        user_id = cursor.fetchone()
+        cursor.execute("SELECT nombre, id_rol, password FROM Usuarios WHERE Nombre = %s", (username,))
+        user_data = cursor.fetchone()
         
-        if user_id:
-            return jsonify({'message': 'Inicio de sesión exitoso', 'user_id': user_id[0]}), 200
+        if user_data:
+            nombre, id_rol, password_hash = user_data
+            print(password_hash.encode('utf-8'))
+            if bcrypt.hashpw(password.encode('utf-8'), password_hash) == password_hash:
+                return jsonify({'message': 'Inicio de sesión exitoso', 'nombre': nombre, 'id_rol': id_rol}), 200
+            else:
+                return jsonify({'error': 'Contraseña incorrecta'}), 401
         else:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 # Ruta para crear plantas
 @app.route('/create_plant', methods=['POST'])
