@@ -9,8 +9,8 @@ def connect_db():
     return psycopg2.connect(
         host="localhost",
         database="web",
-        user="postgres",
-        password="root@."
+        user="test",
+        password="test12."
     )
 
 # Ruta para el registro de usuariosimport bcrypt  # Asegúrate de importar bcrypt
@@ -29,9 +29,10 @@ def register():
         
         conn = connect_db()
         cursor = conn.cursor()
-        print(hashed_password.decode('utf-8'))
+        tosave = hashed_password.decode('utf-8')
+        print(tosave)
         cursor.execute("INSERT INTO Usuarios (nombre, estado, id_rol, password) \
-                       VALUES (%s, %s, %s, %s) RETURNING ID", (username, estado, rol, hashed_password))
+                       VALUES (%s, %s, %s, %s) RETURNING ID", (username, estado, rol, tosave))
         user_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
@@ -59,7 +60,7 @@ def login():
         if user_data:
             nombre, id_rol, password_hash = user_data
             print(password_hash.encode('utf-8'))
-            if bcrypt.hashpw(password.encode('utf-8'), password_hash) == password_hash:
+            if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
                 return jsonify({'message': 'Inicio de sesión exitoso', 'nombre': nombre, 'id_rol': id_rol}), 200
             else:
                 return jsonify({'error': 'Contraseña incorrecta'}), 401
