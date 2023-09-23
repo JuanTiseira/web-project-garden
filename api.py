@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 import psycopg2
 import bcrypt
-
+from utils import verificar_token
 app = Flask(__name__)
 
 # Conexión a la base de datos
@@ -16,6 +16,7 @@ def connect_db():
 # Ruta para el registro de usuariosimport bcrypt  # Asegúrate de importar bcrypt
 
 @app.route('/register', methods=['POST'])
+@verificar_token
 def register():
     try:
         data = request.json
@@ -30,7 +31,6 @@ def register():
         conn = connect_db()
         cursor = conn.cursor()
         tosave = hashed_password.decode('utf-8')
-        print(tosave)
         cursor.execute("INSERT INTO Usuarios (nombre, estado, id_rol, password) \
                        VALUES (%s, %s, %s, %s) RETURNING ID", (username, estado, rol, tosave))
         user_id = cursor.fetchone()[0]
@@ -44,6 +44,10 @@ def register():
 
 
 # Ruta para el inicio de sesión
+import jwt
+import datetime
+
+# ...
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -59,9 +63,17 @@ def login():
         
         if user_data:
             nombre, id_rol, password_hash = user_data
-            print(password_hash.encode('utf-8'))
             if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
-                return jsonify({'message': 'Inicio de sesión exitoso', 'nombre': nombre, 'id_rol': id_rol}), 200
+                # Genera un token JWT con una expiración de 30 minutos
+                token_payload = {
+                    'nombre': nombre,
+                    'id_rol': id_rol,
+                    'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+                }
+                secret_key = 'tu_clave_secreta'  # Cambia esto a tu clave secreta real
+                token = jwt.encode(token_payload, secret_key, algorithm='HS256')
+                
+                return jsonify({'message': 'Inicio de sesión exitoso', 'nombre': nombre, 'id_rol': id_rol, 'token': token}), 200
             else:
                 return jsonify({'error': 'Contraseña incorrecta'}), 401
         else:
@@ -70,19 +82,22 @@ def login():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 # Ruta para crear plantas
 @app.route('/create_plant', methods=['POST'])
+@verificar_token
 def create_plant():
     try:
         data = request.json
         plant_name = data['name']
         description = data['description']
         price = data['price']
+        categori = data['categori']
+        image = data['image']
+
         
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO Plantas (Nombre, Descripcion, Precio) VALUES (%s, %s, %s) RETURNING ID", (plant_name, description, price))
+        cursor.execute("INSERT INTO Plantas (nombre, descripcion, precio, categoria_id, imagen) VALUES (%s, %s, %s) RETURNING ID", (plant_name, description, price, categori, image))
         plant_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
