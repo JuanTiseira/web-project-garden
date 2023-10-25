@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import psycopg2
 import bcrypt
 from utils import verificar_token
-app = Flask(__name__)
+from flask_cors import CORS
+import os
 
+app = Flask(__name__)
+CORS(app)
 # Conexión a la base de datos
 def connect_db():
     return psycopg2.connect(
@@ -84,20 +87,17 @@ def login():
 
 # Ruta para crear plantas
 @app.route('/create_plant', methods=['POST'])
-@verificar_token
 def create_plant():
     try:
         data = request.json
-        plant_name = data['name']
-        description = data['description']
-        price = data['price']
-        categori = data['categori']
-        image = data['image']
+        nombre = data['nombre']
+        descripcion = data['descripcion']
+        imagen = data['imagen']
 
         
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO Plantas (nombre, descripcion, precio, categoria_id, imagen) VALUES (%s, %s, %s) RETURNING ID", (plant_name, description, price, categori, image))
+        cursor.execute("INSERT INTO Plantas (nombre, descripcion, imagen) VALUES (%s, %s, %s) RETURNING ID", (nombre, descripcion, imagen))
         plant_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
@@ -107,6 +107,65 @@ def create_plant():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/get_plants', methods=['GET'])
+def get_plants():
+    print("hola")
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM plantas")
+        plants = cursor.fetchall()
+        conn.close()
+
+        # Convierte los resultados en una lista de diccionarios
+        plant_list = []
+        for plant in plants:
+            plant_dict = {
+                'id': plant[0],
+                'nombre': plant[1],
+                'descripcion': plant[2],
+                'imagen': plant[3]
+            }
+            plant_list.append(plant_dict)
+
+        return jsonify({'plants': plant_list})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/update_plant/<int:plant_id>', methods=['POST'])
+def update_plant(plant_id):
+    try:
+        data = request.json
+        print(data)
+        nombre = data['nombre']
+        descripcion = data['descripcion']
+        imagen = data['imagen']
+
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE plantas SET nombre = %s, descripcion = %s, imagen = %s WHERE id = %s", (nombre, descripcion, imagen, plant_id))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'message': f'Planta con ID {plant_id} modificada con éxito'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/delete_plant/<int:plant_id>', methods=['DELETE'])
+def delete_plant(plant_id):
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM plantas WHERE id = %s", (plant_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'message': f'Planta con ID {plant_id} eliminada con éxito'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500   
 # Ruta para crear publicaciones
 @app.route('/create_publication', methods=['POST'])
 def create_publication():
@@ -142,7 +201,32 @@ def approve_user(user_id):
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+##imagen
 
+# Configura la carpeta donde se almacenarán las imágenes
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Tamaño máximo de archivo (16 MB)
 
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+# Ruta para cargar una imagen
+@app.route('/upload', methods=['POST'])
+def upload_image():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No se ha seleccionado ninguna imagen.'}), 400
+    image = request.files['image']
+    if image.filename == '':
+        return jsonify({'error': 'No se ha seleccionado ninguna imagen.'}), 400
+
+    if image:
+        image.save(os.path.join(app.config['UPLOAD_FOLDER'], image.filename))
+        return jsonify({'message': 'Imagen cargada con éxito'}), 200
+
+# Ruta para acceder a una imagen cargada
+@app.route('/uploads/<filename>')
+def uploaded_image(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 if __name__ == '__main__':
     app.run(debug=True)
